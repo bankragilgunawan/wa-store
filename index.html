@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chatbot Jualan</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#ece5dd; margin:0; }
+  .app { max-width:480px; margin:auto; height:100vh; display:flex; flex-direction:column; background:#fff; }
+  .header { background:#075e54; color:#fff; padding:10px; font-weight:bold; display:flex; align-items:center; gap:10px; }
+  .header img { width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #fff; }
+  .header .info { display:flex; flex-direction:column; }
+  .header .name { font-weight:600; font-size:15px; }
+  .header .status { font-size:12px; color:#d9fdd3; }
+  .chat-window { flex:1; padding:10px; overflow-y:auto; background:#ece5dd; display:flex; flex-direction:column; }
+  .message { max-width:75%; margin:8px 0; padding:10px 14px 16px; border-radius:12px; font-size:14px; position:relative; word-wrap:break-word; white-space:pre-line; }
+  .bot { background:#fff; align-self:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+  .user { background:#dcf8c6; align-self:flex-end; }
+  .meta { font-size:11px; position:absolute; bottom:2px; right:6px; display:flex; align-items:center; gap:4px; color:gray; }
+  .meta .time { font-size:11px; }
+  .meta svg { width:16px; height:16px; }
+  .input-bar { display:flex; align-items:center; gap:8px; padding:8px; background:#f0f0f0; }
+  .input-bar input { flex:1; padding:10px; border-radius:20px; border:1px solid #ccc; font-size:14px; }
+  .input-bar button { background:#25d366; border:none; color:#fff; padding:10px 16px; border-radius:50%; font-size:16px; cursor:pointer; }
+  .quick-replies { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .quick-replies button { padding:6px 10px; border:none; border-radius:16px; background:#e2e2e2; cursor:pointer; font-size:13px; }
+  .quick-replies button:hover { background:#d1f1d6; }
+  .chat-form { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  .chat-form input, .chat-form select { padding:8px; border-radius:6px; border:1px solid #ccc; font-size:13px; }
+  .chat-form button { background:#25d366; color:#fff; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:14px; }
+  .action-btns { display:flex; gap:8px; margin-top:6px; }
+  .wa-btn, .cancel-btn { flex:1; padding:8px 12px; border:none; border-radius:6px; cursor:pointer; font-size:14px; }
+  .wa-btn { background:#25d366; color:#fff; }
+  .cancel-btn { background:#ff4d4d; color:#fff; }
+  .summary-line { cursor:pointer; padding:2px 0; }
+  .summary-line:hover { background:#f0f0f0; }
+  .error { color:red; font-size:12px; margin-top:2px; }
+  .invalid { border:1px solid red; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <img src="https://placehold.co/100x100?text=RG" alt="Foto Profil" />
+    <div class="info">
+      <div class="name">Toko iPhone & Jasa</div>
+      <div class="status">online</div>
+    </div>
+  </div>
+  <div class="chat-window" id="chatWindow">
+    <div class="message bot">
+      Halo 👋, pilih kategori layanan di bawah ini:
+      <div class="meta"><span class="time"></span></div>
+      <div class="quick-replies">
+        <button data-type="pulsa">📱 Pulsa</button>
+        <button data-type="ewallet">💳 E-Wallet</button>
+        <button data-type="transfer">🏦 Transfer</button>
+        <button data-type="token">⚡ Token</button>
+        <button data-type="angsuran">📑 Angsuran</button>
+        <button data-type="layanan">📺 Layanan</button>
+        <button data-type="iphone">🍏 iPhone Bekas</button>
+      </div>
+    </div>
+  </div>
+  <div class="input-bar">
+    <input id="chatInput" placeholder="Ketik pesan..." />
+    <button id="sendBtn">➤</button>
+  </div>
+</div>
+<audio id="sndSent" preload="auto">
+  <source src="notif/kirim.mp3" type="audio/mpeg">
+  <source src="notif/kirim.ogg" type="audio/ogg">
+</audio>
+<script>
+  const chatWindow = document.getElementById('chatWindow');
+  const chatInput = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const WA_NUMBER = "6282121218466";
+
+  let soundEnabled = false;
+  // Aktifkan suara setelah interaksi pertama di halaman
+  document.body.addEventListener('click', () => { soundEnabled = true; }, { once: true });
+
+  function playSound(type) {
+    if (!soundEnabled) return;
+    if (type === 'sent') document.getElementById('sndSent').play();
+    else if (type === 'recv') document.getElementById('sndRecv').play();
+  }
+
+  function getTime() {
+    const d = new Date();
+    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function tickSVG(type = 'single', color = 'gray') {
+    if (type === 'single') {
+      return `<svg viewBox="0 0 24 24" fill="${color}"><path d="M9 16.2l-3.5-3.6-1.4 1.4 4.9 5 11-11-1.4-1.4z"/></svg>`;
+    } else {
+      return `<svg viewBox="0 0 24 24" fill="${color}"><path d="M16.6 5.6l-1.4-1.4-7.1 7.2-3.2-3.2-1.4 1.4 4.6 4.6z"/><path d="M21 5.6l-1.4-1.4-7.1 7.2-1.4-1.4-1.4 1.4 2.8 2.8z"/></svg>`;
+    }
+  }
+
+  function addMessage(text, sender = 'bot', status = 'single') {
+    const div = document.createElement('div');
+    div.className = 'message ' + sender;
+    div.innerText = text;
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const time = document.createElement('span');
+    time.className = 'time';
+    time.innerText = getTime();
+    meta.appendChild(time);
+
+    if (sender === 'user') {
+      const icon = document.createElement('span');
+      icon.className = 'status';
+      icon.innerHTML = tickSVG(status);
+      meta.appendChild(icon);
+    }
+
+    div.appendChild(meta);
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    if (sender === 'bot') playSound('recv');
+  }
+
+  function addForm(type) {
+    const div = document.createElement('div');
+    div.className = 'message bot';
+    div.innerHTML = `Silakan isi form ${type.toUpperCase()}:`;
+
+    const form = document.createElement('form');
+    form.className = 'chat-form';
+
+    switch (type) {
+      case 'pulsa':
+        form.innerHTML = `
+          <input name="nominal" type="number" placeholder="Nominal (Rp)" required>
+          <input name="no_hp" type="tel" placeholder="Nomor HP Tujuan" required>
+          <button>Kirim</button>
+        `;
+        break;
+      case 'ewallet':
+        form.innerHTML = `
+          <select name="provider" required>
+            <option value="">Pilih E-Wallet</option>
+            <option>GoPay</option><option>OVO</option><option>DANA</option><option>ShopeePay</option>
+          </select>
+          <input name="no_hp" type="tel" placeholder="Nomor HP" required>
+          <input name="nominal" type="number" placeholder="Nominal (Rp)" required>
+          <button>Kirim</button>
+        `;
+        break;
+      case 'transfer':
+        form.innerHTML = `
+          <select name="bank" required>
+            <option value="">Pilih Bank</option>
+            <option>BCA</option><option>BNI</option><option>BRI</option><option>Mandiri</option>
+          </select>
+          <input name="rekening" placeholder="No Rekening" required>
+          <input name="nama" placeholder="Nama Penerima" required>
+          <input name="nominal" type="number" placeholder="Nominal (Rp)" required>
+          <button>Kirim</button>
+        `;
+        break;
+      case 'token':
+        form.innerHTML = `
+          <input name="id_pelanggan" placeholder="ID Pelanggan PLN" required>
+          <input name="nominal" type="number" placeholder="Nominal (Rp)" required>
+          <button>Kirim</button>
+        `;
+        break;
+      case 'angsuran':
+        form.innerHTML = `
+          <input name="id" placeholder="ID / No Kontrak" required>
+          <input name="nama" placeholder="Nama Lengkap" required>
+          <input name="nominal" type="number" placeholder="Nominal (Rp)" required>
+          <button>Kirim</button>
+        `;
+        break;
+      case 'layanan':
+        form.innerHTML = `
+          <select name="service" required>
+            <option value="">Pilih Layanan</option>
+            <option>Netflix</option><option>Spotify</option><option>Disney+</option><option>Youtube Premium</option>
+          </select>
+          <input name="email" type="email" placeholder="Email Akun" required>
+          <input name="durasi" placeholder="Durasi (1Bulan/3Bulan/1Tahun)" required>
+          <button>Kirim</button>
+        `;
+        break;
+      case 'iphone':
+        form.innerHTML = `
+          <input name="nama" placeholder="Nama Lengkap" required>
+          <input name="alamat" placeholder="Alamat Lengkap" required>
+          <input name="hp" placeholder="No HP" required>
+          <select name="seri" required>
+            <option value="">Pilih Seri iPhone</option>
+            <option>iPhone X</option><option>iPhone XR</option><option>iPhone XS</option>
+            <option>iPhone 11</option><option>iPhone 12</option><option>iPhone 13</option><option>iPhone 14</option>
+          </select>
+          <input name="bukti" placeholder="Link Bukti Transfer" required>
+          <button>Kirim</button>
+        `;
+        break;
+    }
+
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      const data = new FormData(form);
+      let order = { type };
+      for (let [k,v] of data.entries()) order[k] = v;
+
+      addMessage('Form terkirim ✅', 'user', 'single');
+      playSound('sent');
+      setTimeout(() => updateLastStatus('double', 'gray'), 1000);
+      setTimeout(() => updateLastStatus('double', '#34b7f1'), 2000);
+      setTimeout(() => showSummary(order), 600);
+    };
+
+    div.appendChild(form);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<span class="time">${getTime()}</span>`;
+    div.appendChild(meta);
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function getInputType(key) {
+    if (key.includes('hp') || key.includes('no_hp') || key.includes('rekening')) return 'tel';
+    if (key.includes('email')) return 'email';
+    if (key.includes('nominal') || key.includes('id')) return 'number';
+    return 'text';
+  }
+
+  function validateField(key, value) {
+    if (key.includes('hp') || key.includes('no_hp') || key.includes('rekening')) {
+      return /^d{10,}$/.test(value) ? '' : 'Nomor minimal 10 digit angka';
+    }
+    if (key.includes('email')) {
+      return /^[^@]+@[^@]+.[^@]+$/.test(value) ? '' : 'Email tidak valid';
+    }
+    if (key.includes('nominal') || key.includes('id')) {
+      return /^d+$/.test(value) && parseInt(value) > 0 ? '' : 'Harus angka lebih dari 0';
+    }
+    return value.trim() ? '' : 'Tidak boleh kosong';
+  }
+
+  function showSummary(order) {
+    const div2 = document.createElement('div');
+    div2.className = 'message bot';
+    div2.innerHTML = '📋 Ringkasan Pesanan:';
+
+    const summary = document.createElement('div');
+    for (let key in order) {
+      if (key === 'type') continue;
+      const line = document.createElement('div');
+      line.className = 'summary-line';
+      line.dataset.key = key;
+      line.innerText = `${key}: ${order[key]}`;
+      line.onclick = () => {
+        const input = document.createElement('input');
+        input.type = getInputType(key);
+        input.value = order[key];
+        line.innerHTML = `${key}: `;
+        line.appendChild(input);
+        const err = document.createElement('div');
+        err.className = 'error';
+        line.appendChild(err);
+        input.focus();
+        input.onblur = () => {
+          const errorMsg = validateField(key, input.value);
+          if (errorMsg) {
+            input.classList.add('invalid');
+            err.innerText = errorMsg;
+            input.focus();
+          } else {
+            input.classList.remove('invalid');
+            err.innerText = '';
+            saveEdit(key, input.value, line, order);
+          }
+        };
+        input.onkeypress = e => { if (e.key === 'Enter') input.blur(); };
+      };
+      summary.appendChild(line);
+    }
+    div2.appendChild(summary);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<span class="time">${getTime()}</span>`;
+    div2.appendChild(meta);
+
+    const btns = document.createElement('div');
+    btns.className = 'action-btns';
+
+    const btnWA = document.createElement('button');
+    btnWA.className = 'wa-btn';
+    btnWA.innerText = '✅ Lanjut ke WhatsApp';
+    btnWA.onclick = () => {
+      let finalMsg = `*Pesanan Baru* (${order.type.toUpperCase()})
+`;
+      for (let k in order) if (k !== 'type') finalMsg += `${k}: ${order[k]}
+`;
+      window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(finalMsg)}`, '_blank');
+    };
+
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 'cancel-btn';
+    btnCancel.innerText = '❌ Batal';
+    btnCancel.onclick = () => {
+      div2.remove();
+      addMessage('Pesanan dibatalkan. Silakan isi ulang form. ❌', 'bot');
+    };
+
+    btns.appendChild(btnWA);
+    btns.appendChild(btnCancel);
+    div2.appendChild(btns);
+
+    chatWindow.appendChild(div2);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function saveEdit(key, newVal, line, order) {
+    order[key] = newVal;
+    line.innerHTML = `${key}: ${newVal}`;
+    line.dataset.key = key;
+  }
+
+  function updateLastStatus(type = 'double', color = 'gray') {
+    const icons = chatWindow.querySelectorAll('.user .status');
+    if (icons.length) {
+      icons[icons.length - 1].innerHTML = tickSVG(type, color);
+    }
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+
+  function sendMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    addMessage(text, 'user', 'single');
+    playSound('sent');
+    chatInput.value = '';
+    setTimeout(() => updateLastStatus('double', 'gray'), 1000);
+    setTimeout(() => updateLastStatus('double', '#34b7f1'), 2000);
+  }
+
+  chatWindow.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-type]');
+    if (!btn) return;
+    const type = btn.dataset.type;
+    addMessage('Saya pilih: ' + btn.innerText, 'user', 'single');
+    setTimeout(() => updateLastStatus('double', 'gray'), 1000);
+    setTimeout(() => updateLastStatus('double', '#34b7f1'), 2000);
+    setTimeout(() => addForm(type), 800);
+  });
+</script>
+</body>
+</html>
